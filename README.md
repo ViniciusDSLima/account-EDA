@@ -1,2 +1,90 @@
-# account-EDA
-micro service with kafka and event sourcing pattern to create and management accounts to user's banking accounts 
+# Account-EDA
+
+Aplicação de gerenciamento de contas utilizando arquitetura orientada a eventos (EDA) e padrão CQRS (Command Query Responsibility Segregation).
+
+## Arquitetura
+
+A aplicação segue os princípios de:
+
+- **Domain-Driven Design (DDD)**: Organização do código centrada no domínio
+- **Command Query Responsibility Segregation (CQRS)**: Separação de comandos e consultas
+- **Event-Driven Architecture (EDA)**: Comunicação baseada em eventos
+
+### Estrutura do Projeto
+
+```
+├── cmd
+│   └── api               # Ponto de entrada da aplicação
+├── internal
+│   ├── domain            # Entidades e regras de domínio
+│   │   └── account       
+│   ├── application       # Casos de uso da aplicação
+│   │   ├── command       # Comandos (escritas)
+│   │   ├── query         # Consultas (leituras)
+│   │   └── event         # Eventos e publicadores
+│   └── infrastructure    # Implementações técnicas
+│       ├── persistence   # Repositórios para persistência
+│       ├── kafka         # Implementação de mensageria
+│       └── api           # Handlers e rotas da API
+└── docker-compose.yml    # Configuração dos serviços
+```
+
+## Requisitos
+
+- Go 1.22+
+- Docker e Docker Compose
+
+## Como Executar
+
+1. Clone o repositório
+2. Execute os serviços com Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+3. Execute a aplicação:
+
+```bash
+go run cmd/api/main.go
+```
+
+## API REST
+
+A API disponibiliza os seguintes endpoints:
+
+### Contas
+
+- `POST /accounts` - Criar uma conta
+- `GET /accounts` - Listar todas as contas
+- `GET /accounts/{id}` - Obter detalhes de uma conta
+- `POST /accounts/{id}/deposit` - Realizar um depósito
+- `POST /accounts/{id}/withdraw` - Realizar um saque
+
+### Exemplo de Uso
+
+Criar uma conta:
+
+```bash
+curl -X POST http://localhost:8080/accounts \
+  -H "Content-Type: application/json" \
+  -d '{"name":"João Silva","email":"joao@example.com"}'
+```
+
+Realizar um depósito:
+
+```bash
+curl -X POST http://localhost:8080/accounts/{id}/deposit \
+  -H "Content-Type: application/json" \
+  -d '{"amount":100.00}'
+```
+
+## Implementação CQRS
+
+A aplicação implementa CQRS através da separação clara entre:
+
+- **Commands**: Operações que modificam o estado (CreateAccount, Deposit, Withdraw)
+- **Queries**: Operações que leem o estado (GetAccount, GetAccounts)
+- **Events**: Notificações de mudanças de estado (AccountCreated, AccountDeposited)
+
+Esta separação permite otimizar cada caminho independentemente e escalar de acordo com as necessidades.
