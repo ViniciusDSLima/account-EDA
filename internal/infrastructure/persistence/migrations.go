@@ -10,10 +10,6 @@ func RunMigrations(db *sql.DB) error {
 		return err
 	}
 
-	if err := createEventsTable(db); err != nil {
-		return err
-	}
-
 	if err := createOutboxTable(db); err != nil {
 		return err
 	}
@@ -38,22 +34,7 @@ func createAccountsTable(db *sql.DB) error {
 	return err
 }
 
-// createEventsTable cria a tabela de eventos
-func createEventsTable(db *sql.DB) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS events (
-			id VARCHAR(36) PRIMARY KEY,
-			account_id VARCHAR(36) NOT NULL,
-			event_type VARCHAR(50) NOT NULL,
-			event_data JSONB NOT NULL,
-			aggregate_id VARCHAR(36) NOT NULL,
-			timestamp TIMESTAMP NOT NULL,
-			FOREIGN KEY (account_id) REFERENCES accounts(id)
-		)
-	`
-	_, err := db.Exec(query)
-	return err
-}
+
 
 // createOutboxTable cria a tabela outbox para publicação confiável de eventos
 func createOutboxTable(db *sql.DB) error {

@@ -83,7 +83,7 @@ func (p *EventPublisher) Publish(event account.Event) error {
 	}
 
 	// Define um timeout curto para não bloquear a aplicação quando Kafka não está disponível
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	err = p.writer.WriteMessages(ctx, message)
