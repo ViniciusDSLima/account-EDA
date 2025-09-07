@@ -19,11 +19,11 @@ type CreateAccountCommand struct {
 type CreateAccountHandler struct {
 	repository account.Repository
 	publisher  event.Publisher
-	outboxRepo *persistence.OutboxRepository
+	outboxRepo persistence.OutboxRepositoryInterface
 }
 
 // NewCreateAccountHandler cria um novo manipulador de criação de conta
-func NewCreateAccountHandler(repository account.Repository, publisher event.Publisher, outboxRepo *persistence.OutboxRepository) *CreateAccountHandler {
+func NewCreateAccountHandler(repository account.Repository, publisher event.Publisher, outboxRepo persistence.OutboxRepositoryInterface) *CreateAccountHandler {
 	return &CreateAccountHandler{
 		repository: repository,
 		publisher:  publisher,

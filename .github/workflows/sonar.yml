@@ -1,0 +1,169 @@
+name: SonarQube Analysis
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  sonar-analysis:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for better analysis
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/application/...
+          go test -v -race -json ./internal/application/... > test-results.json
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --out-format=json --out-format=tab > golangci-lint-report.json || true
+
+      - name: Run go vet
+        run: |
+          go vet ./... > govet-report.txt 2>&1 || true
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=account-eda
+            -Dsonar.projectName=Account EDA
+            -Dsonar.projectVersion=1.0.0
+            -Dsonar.sources=internal/application
+            -Dsonar.tests=internal/application/command,internal/application/query
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/node_modules/**,**/*.pb.go,**/migrations/**,**/event/handlers/**
+            -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.go.tests.reportPaths=test-results.json
+            -Dsonar.coverage.exclusions=**/*_test.go,**/vendor/**,**/node_modules/**,**/*.pb.go,**/migrations/**,**/event/handlers/**
+            -Dsonar.coverage.minimum=80
+            -Dsonar.duplicated_lines_density.maximum=3
+            -Dsonar.go.golangci-lint.reportPaths=golangci-lint-report.json
+            -Dsonar.go.govet.reportPaths=govet-report.txt
+            -Dsonar.security.hotspots.onlySecurityHotspots=true
+            -Dsonar.code_smells.enabled=true
+            -Dsonar.bugs.enabled=true
+            -Dsonar.vulnerabilities.enabled=true
+            -Dsonar.cpd.go.minimumtokens=100
+            -Dsonar.cpd.go.minimumlines=10
+            -Dsonar.complexity.max=10
+            -Dsonar.function.complexity.max=10
+            -Dsonar.filesize.max=1000
+            -Dsonar.lines.max=1000
+            -Dsonar.comment.ratio.minimum=20
+            -Dsonar.test.exclusions=**/*_test.go
+            -Dsonar.test.inclusions=**/*_test.go
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.out
+            coverage.html
+            test-results.json
+            golangci-lint-report.json
+            govet-report.txt
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            try {
+              // Read coverage file
+              const coverageFile = 'coverage.out';
+              if (fs.existsSync(coverageFile)) {
+                const coverage = fs.readFileSync(coverageFile, 'utf8');
+                const lines = coverage.split('\n');
+                const totalLine = lines.find(line => line.includes('total:'));
+                
+                if (totalLine) {
+                  const coverageMatch = totalLine.match(/(\d+\.\d+)%/);
+                  if (coverageMatch) {
+                    const coveragePercent = parseFloat(coverageMatch[1]);
+                    const emoji = coveragePercent >= 80 ? '✅' : '❌';
+                    
+                    const comment = `## ${emoji} Test Coverage Report
+                    
+                    **Coverage: ${coveragePercent.toFixed(2)}%**
+                    
+                    ${coveragePercent >= 80 ? '✅ Coverage meets minimum requirement (80%)' : '❌ Coverage below minimum requirement (80%)'}
+                    
+                    <details>
+                    <summary>View detailed coverage report</summary>
+                    
+                    \`\`\`
+                    ${totalLine}
+                    \`\`\`
+                    </details>`;
+                    
+                    github.rest.issues.createComment({
+                      issue_number: context.issue.number,
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      body: comment
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.log('Error creating coverage comment:', error);
+            }
+
+      - name: Fail if coverage is below threshold
+        run: |
+          if [ -f coverage.out ]; then
+            COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+            echo "Current coverage: ${COVERAGE}%"
+            if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+              echo "❌ Coverage is below 80% threshold"
+              exit 1
+            else
+              echo "✅ Coverage meets 80% threshold"
+            fi
+          else
+            echo "❌ Coverage file not found"
+            exit 1
+          fi
